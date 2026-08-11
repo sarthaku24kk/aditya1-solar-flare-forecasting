@@ -1,0 +1,16 @@
+# raw extracted satellite data (1.8 GB) - not needed on GitHub
+data/solexs/
+data/hel1os/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Streamlit
+.streamlit/
+
+# local temp
+out.log
+err.log
