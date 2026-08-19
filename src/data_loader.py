@@ -24,10 +24,11 @@ def _to_utc(tstart: np.ndarray) -> pd.DatetimeIndex:
     return pd.to_datetime(np.asarray(tstart, dtype=np.float64), unit="s", utc=True)
 
 
-def load_solexs() -> pd.DataFrame:
+def load_solexs(solexs_dir: str | None = None) -> pd.DataFrame:
     """Sum SoLEXS SDD2 spectra over channels -> per-second total counts."""
+    solexs_dir = solexs_dir or SOLEXS_DIR
     frames = []
-    for f in sorted(glob.glob(os.path.join(SOLEXS_DIR, "**", "*.pi"), recursive=True)):
+    for f in sorted(glob.glob(os.path.join(solexs_dir, "**", "*.pi"), recursive=True)):
         if "SDD1" in f:  # SDD1 has no data (empty GTI)
             continue
         with fits.open(f) as h:
@@ -38,16 +39,19 @@ def load_solexs() -> pd.DataFrame:
         df.index = df.index.tz_localize(None)
         frames.append(df)
     out = pd.concat(frames, axis=0)
+    if out.empty:
+        return out
     return out[~out.index.duplicated(keep="last")].sort_index()
 
 
-def load_hel1os() -> pd.DataFrame:
+def load_hel1os(hel1os_dir: str | None = None) -> pd.DataFrame:
     """Read every HEL1OS light-curve energy band as one column.
 
     Column names: hel1os_<det>_<elow>-<ehigh>keV  e.g. hel1os_cdte1_5-20keV
     """
+    hel1os_dir = hel1os_dir or HEL1OS_DIR
     per_det: dict[str, list[pd.DataFrame]] = {}
-    for f in sorted(glob.glob(os.path.join(HEL1OS_DIR, "**", "lightcurve_*.fits"), recursive=True)):
+    for f in sorted(glob.glob(os.path.join(hel1os_dir, "**", "lightcurve_*.fits"), recursive=True)):
         det = os.path.basename(f).replace("lightcurve_", "").replace(".fits", "")
         with fits.open(f) as h:
             file_cols = {}
@@ -69,6 +73,8 @@ def load_hel1os() -> pd.DataFrame:
         stacked = pd.concat(frames, axis=0)
         stacked = stacked[~stacked.index.duplicated(keep="last")].sort_index()
         det_frames.append(stacked)
+    if not det_frames:
+        return pd.DataFrame()
     out = pd.concat(det_frames, axis=1)
     return out.sort_index()
 

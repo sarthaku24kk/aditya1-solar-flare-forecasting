@@ -7,7 +7,12 @@ training-set median (neutral value) so predictions still work.
 """
 from __future__ import annotations
 
+import gzip
 import io
+import os
+import shutil
+import tempfile
+import zipfile
 
 import joblib
 import numpy as np
@@ -30,7 +35,7 @@ def _find_time_col(columns: list[str]) -> str | None:
 
 
 def load_uploaded(file_bytes, filename: str) -> pd.DataFrame:
-    """Parse an uploaded CSV into a DataFrame with a datetime index."""
+    """Parse an uploaded file (CSV/XLSX) into a DataFrame with a datetime index."""
     if filename.endswith((".xlsx", ".xls")):
         df = pd.read_excel(io.BytesIO(file_bytes))
     else:
@@ -48,6 +53,41 @@ def load_uploaded(file_bytes, filename: str) -> pd.DataFrame:
     out = df.drop(columns=[time_col]).copy()
     out.index = ts.dt.tz_localize(None)
     return out.dropna(subset=[out.columns[0]]) if len(out.columns) else out
+
+
+def load_uploaded_zip(file_bytes: bytes, filename: str) -> pd.DataFrame:
+    """Parse a zip of Aditya-L1 FITS products (.pi spectra + light curves).
+
+    Files may be plain FITS or gzipped (.gz); nested folders are handled.
+    """
+    from src.data_loader import load_hel1os, load_solexs
+
+    with tempfile.TemporaryDirectory() as tmp:
+        with zipfile.ZipFile(io.BytesIO(file_bytes)) as zf:
+            for m in zf.infolist():
+                if m.is_dir():
+                    continue
+                data = zf.read(m)
+                name = m.filename
+                if name.endswith(".gz"):
+                    data = gzip.decompress(data)
+                    name = name[:-3]
+                base = name.split("/")[-1].lower()
+                if not (base.endswith(".pi") or base.startswith("lightcurve_")):
+                    continue
+                target = os.path.join(tmp, name)
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                with open(target, "wb") as out:
+                    out.write(data)
+
+        solexs = load_solexs(tmp)
+        hel1os = load_hel1os(tmp)
+        if solexs.empty and hel1os.empty:
+            raise ValueError(
+                "No SoLEXS (.pi) or HEL1OS (lightcurve_*.fits) files found in the zip."
+            )
+        out = solexs.join(hel1os, how="outer").sort_index()
+    return out
 
 
 def _map_columns(df: pd.DataFrame, expected: list[str]) -> pd.DataFrame:
