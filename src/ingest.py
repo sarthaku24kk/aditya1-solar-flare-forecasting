@@ -116,6 +116,44 @@ def _map_columns(df: pd.DataFrame, expected: list[str]) -> pd.DataFrame:
     return df.rename(columns=rename)
 
 
+def merge_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
+    """Merge parsed uploads onto a single time axis.
+
+    Same-channel files (e.g. two 12h HEL1OS halves) are stacked on rows;
+    different instruments (SoLEXS vs HEL1OS) are joined on the index.
+    """
+    solexs, hel1os = [], []
+    for df in frames:
+        if "solexs_sdd2_counts" in df.columns:
+            solexs.append(df)
+        hel = [c for c in df.columns if c.startswith("hel1os_")]
+        if hel:
+            hel1os.append(df[hel])
+    parts = []
+    if solexs:
+        s = pd.concat(solexs, axis=0)
+        parts.append(s[~s.index.duplicated(keep="last")].sort_index())
+    if hel1os:
+        per_det: dict[str, list[pd.DataFrame]] = {}
+        for df in hel1os:
+            for det in ("cdte1", "cdte2", "czt1", "czt2"):
+                cols = [c for c in df.columns if f"hel1os_{det}_" in c]
+                if cols:
+                    per_det.setdefault(det, []).append(df[cols])
+        det_frames = []
+        for det, chunk in per_det.items():
+            stacked = pd.concat(chunk, axis=0)
+            stacked = stacked[~stacked.index.duplicated(keep="last")].sort_index()
+            det_frames.append(stacked)
+        parts.append(pd.concat(det_frames, axis=1).sort_index())
+    if not parts:
+        return pd.DataFrame()
+    out = parts[0]
+    for p in parts[1:]:
+        out = out.join(p, how="outer").sort_index()
+    return out
+
+
 def prepare_feature_row(df: pd.DataFrame, meta: dict) -> tuple[pd.DataFrame, pd.Series]:
     """Build features for the latest timestamp; return (features_df, last_raw)."""
     df = _map_columns(df.copy(), meta["feature_names"])

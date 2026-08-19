@@ -88,8 +88,8 @@ with tab2:
                     frames.append(load_uploaded_zip(f.getvalue(), f.name))
                 else:
                     frames.append(load_uploaded(f.getvalue(), f.name))
-            raw = pd.concat(frames, axis=0)
-            raw = raw[~raw.index.duplicated(keep="last")].sort_index()
+            from src.ingest import merge_frames
+            raw = merge_frames(frames)
             st.success(
                 f"Parsed {len(uploaded)} file(s) automatically "
                 f"(zips converted: SoLEXS spectra + HEL1OS light curves "
