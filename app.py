@@ -75,19 +75,26 @@ with tab2:
         "(detector + band are auto-detected)."
     )
     uploaded = st.file_uploader(
-        "Choose file", type=["csv", "xlsx", "xls", "zip"]
+        "Choose one or more files (Ctrl+click to select several)",
+        type=["csv", "xlsx", "xls", "zip"],
+        accept_multiple_files=True,
     )
-    if uploaded is not None:
+    if uploaded:
         try:
-            name = uploaded.name.lower()
-            if name.endswith(".zip"):
-                raw = load_uploaded_zip(uploaded.getvalue(), uploaded.name)
-                st.success(
-                    "Zip parsed automatically: SoLEXS spectra + HEL1OS "
-                    "light curves extracted and converted to channel columns."
-                )
-            else:
-                raw = load_uploaded(uploaded.getvalue(), uploaded.name)
+            frames = []
+            for f in uploaded:
+                name = f.name.lower()
+                if name.endswith(".zip"):
+                    frames.append(load_uploaded_zip(f.getvalue(), f.name))
+                else:
+                    frames.append(load_uploaded(f.getvalue(), f.name))
+            raw = pd.concat(frames, axis=0)
+            raw = raw[~raw.index.duplicated(keep="last")].sort_index()
+            st.success(
+                f"Parsed {len(uploaded)} file(s) automatically "
+                f"(zips converted: SoLEXS spectra + HEL1OS light curves "
+                f"-> channel columns)."
+            )
             st.write(f"Loaded {len(raw)} rows, {len(raw.columns)} channels "
                      f"({raw.index.min()} to {raw.index.max()}).")
             st.dataframe(raw.head(10), use_container_width=True)
