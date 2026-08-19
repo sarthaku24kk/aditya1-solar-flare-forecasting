@@ -38,6 +38,8 @@ def load_solexs(solexs_dir: str | None = None) -> pd.DataFrame:
         df = pd.DataFrame({"solexs_sdd2_counts": counts}, index=_to_utc(t))
         df.index = df.index.tz_localize(None)
         frames.append(df)
+    if not frames:
+        return pd.DataFrame()
     out = pd.concat(frames, axis=0)
     if out.empty:
         return out

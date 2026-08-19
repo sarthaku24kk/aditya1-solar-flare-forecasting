@@ -98,15 +98,21 @@ def _map_columns(df: pd.DataFrame, expected: list[str]) -> pd.DataFrame:
         if cc.startswith("solexs") or "sdd" in cc:
             rename[c] = "solexs_sdd2_counts"
         else:
+            import re
             det = next((d for d in ("cdte1", "cdte2", "czt1", "czt2") if d in cc), None)
             if det is None:
                 continue
-            # find band bounds e.g. 5-20 or 5.0-20.0
-            import re
-            m = re.search(r"(\d+\.?\d*)\s*[-_]\s*(\d+\.?\d*)", cc)
+            # band bounds like 5-20keV / 5.0-20.0keV (match keV-anchored pair,
+            # avoiding the detector number inside 'cdte1_5-20keV')
+            m = re.search(r"(\d+(?:\.\d+)?)\s*[-_]\s*(\d+(?:\.\d+)?)kev", cc)
             if m:
                 low, high = float(m.group(1)), float(m.group(2))
                 rename[c] = f"hel1os_{det}_{int(low)}-{int(high)}keV"
+            else:
+                m = re.search(r"[_-](\d+(?:\.\d+)?)[-_](\d+(?:\.\d+)?)\b", cc)
+                if m:
+                    low, high = float(m.group(1)), float(m.group(2))
+                    rename[c] = f"hel1os_{det}_{int(low)}-{int(high)}keV"
     return df.rename(columns=rename)
 
 
